@@ -1,0 +1,31 @@
+databases:
+  - name: breathe_esg_db
+    plan: free
+    databaseName: breathe_esg_db
+
+services:
+  - type: web
+    name: breathe-esg
+    env: python
+    region: oregon
+    buildCommand: |
+      cd frontend && npm install && npm run build
+      cd ../backend && pip install -r requirements.txt
+    startCommand: |
+      cd backend && gunicorn breathe_esg.wsgi:application --bind 0.0.0.0:$PORT
+    healthCheckPath: /
+    releaseCommand: |
+      cd backend && python manage.py migrate --noinput && python manage.py seed_flag_rules
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: breathe_esg_db
+          plan: free
+      - key: ALLOWED_HOSTS
+        value: breathe-esg.onrender.com,localhost,127.0.0.1
+      - key: CORS_ORIGINS
+        value: https://breathe-esg.onrender.com,http://localhost:5173
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: false

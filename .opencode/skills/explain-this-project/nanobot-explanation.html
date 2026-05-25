@@ -1,0 +1,1015 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nanobot - AI Agent from First Principles</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --text-muted: #6e7681;
+            --accent-blue: #58a6ff;
+            --accent-green: #3fb950;
+            --accent-orange: #d29922;
+            --accent-red: #f85149;
+            --accent-purple: #a371f7;
+            --border: #30363d;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+        
+        .container { max-width: 900px; margin: 0 auto; padding: 2rem; }
+        h1 { font-size: 2.5rem; margin-bottom: 0.5rem; background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        h2 { font-size: 1.5rem; margin: 2rem 0 1rem; color: var(--accent-blue); }
+        h3 { font-size: 1.2rem; margin: 1.5rem 0 0.75rem; }
+        h4 { font-size: 1rem; margin: 1rem 0 0.5rem; color: var(--text-secondary); }
+        p { margin-bottom: 1rem; color: var(--text-secondary); }
+        
+        code { font-family: 'JetBrains Mono', monospace; background: var(--bg-tertiary); padding: 0.2em 0.4em; border-radius: 4px; font-size: 0.9em; }
+        pre { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; overflow-x: auto; margin: 1rem 0; }
+        pre code { background: none; padding: 0; font-size: 0.8rem; line-height: 1.5; }
+        
+        .card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; margin: 1.5rem 0; }
+        .card-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--border); }
+        .badge { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; }
+        .badge-blue { background: rgba(88,166,255,0.15); color: var(--accent-blue); }
+        .badge-green { background: rgba(63,185,80,0.15); color: var(--accent-green); }
+        .badge-orange { background: rgba(210,153,34,0.15); color: var(--accent-orange); }
+        .badge-purple { background: rgba(163,113,247,0.15); color: var(--accent-purple); }
+        
+        .analogy-box { background: linear-gradient(135deg, rgba(88,166,255,0.05), rgba(163,113,247,0.05)); border-left: 3px solid var(--accent-purple); padding: 1.25rem; margin: 1rem 0; border-radius: 0 8px 8px 0; }
+        .analogy-box::before { content: "💡 ANALOGY"; display: block; font-size: 0.7rem; font-weight: 700; color: var(--accent-purple); margin-bottom: 0.5rem; letter-spacing: 0.05em; }
+        
+        .problem-box { background: linear-gradient(135deg, rgba(248,81,73,0.05), rgba(210,153,34,0.05)); border-left: 3px solid var(--accent-orange); padding: 1.25rem; margin: 1rem 0; border-radius: 0 8px 8px 0; }
+        .problem-box::before { content: "🎯 PROBLEM"; display: block; font-size: 0.7rem; font-weight: 700; color: var(--accent-orange); margin-bottom: 0.5rem; letter-spacing: 0.05em; }
+        
+        .solution-box { background: linear-gradient(135deg, rgba(63,185,80,0.05), rgba(88,166,255,0.05)); border-left: 3px solid var(--accent-green); padding: 1.25rem; margin: 1rem 0; border-radius: 0 8px 8px 0; }
+        .solution-box::before { content: "✅ SOLUTION"; display: block; font-size: 0.7rem; font-weight: 700; color: var(--accent-green); margin-bottom: 0.5rem; letter-spacing: 0.05em; }
+        
+        .flow-diagram { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; margin: 1rem 0; overflow-x: auto; }
+        .flow-diagram pre { background: none; border: none; padding: 0; margin: 0; }
+        
+        .question-box { background: var(--bg-tertiary); border: 2px dashed var(--border); border-radius: 12px; padding: 1.5rem; margin: 2rem 0; }
+        .question-box h3 { color: var(--accent-blue); }
+        
+        .options { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+        .option-btn { background: var(--bg-secondary); border: 1px solid var(--border); color: var(--text-primary); padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; transition: all 0.2s; font-size: 0.85rem; }
+        .option-btn:hover { border-color: var(--accent-blue); background: rgba(88,166,255,0.1); }
+        
+        .step-indicator { display: flex; align-items: center; justify-content: center; gap: 0.5rem; margin: 2rem 0; }
+        .step { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background: var(--bg-tertiary); border-radius: 8px; font-size: 0.85rem; }
+        .step-num { width: 24px; height: 24px; background: var(--accent-blue); color: var(--bg-primary); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.75rem; }
+        .step-arrow { color: var(--text-muted); }
+        
+        .table-wrapper { overflow-x: auto; margin: 1rem 0; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        th, td { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid var(--border); }
+        th { background: var(--bg-tertiary); font-weight: 600; color: var(--text-secondary); }
+        tr:hover { background: rgba(88,166,255,0.05); }
+        
+        .progress-bar { width: 100%; height: 4px; background: var(--bg-tertiary); border-radius: 2px; margin: 1rem 0; overflow: hidden; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple)); transition: width 0.3s; }
+        
+        .nav-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+        .nav-btn { background: var(--accent-blue); color: var(--bg-primary); border: none; padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-size: 0.9rem; }
+        .nav-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+        .nav-btn:disabled { background: var(--bg-tertiary); color: var(--text-muted); cursor: not-allowed; transform: none; }
+        .nav-btn.secondary { background: transparent; color: var(--text-secondary); border: 1px solid var(--border); }
+        
+        .concept-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin: 1rem 0; }
+        .concept-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; text-align: center; }
+        .concept-icon { font-size: 2rem; margin-bottom: 0.5rem; }
+        .concept-name { font-weight: 600; margin-bottom: 0.25rem; }
+        .concept-desc { font-size: 0.8rem; color: var(--text-secondary); }
+        
+        kbd { background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; padding: 0.15em 0.4em; font-size: 0.85em; }
+        
+        blockquote { border-left: 3px solid var(--accent-orange); padding-left: 1rem; margin: 1rem 0; color: var(--text-secondary); font-style: italic; }
+        
+        .highlight { background: linear-gradient(90deg, rgba(88,166,255,0.2), rgba(163,113,247,0.2)); padding: 0.1em 0.3em; border-radius: 3px; }
+        
+        .emoji-list { list-style: none; padding: 0; }
+        .emoji-list li { padding: 0.5rem 0; display: flex; align-items: flex-start; gap: 0.75rem; }
+        .emoji-list li::before { font-size: 1.2rem; }
+        
+        .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; margin: 1rem 0; }
+        .info-item { background: var(--bg-tertiary); border-radius: 8px; padding: 1rem; }
+        .info-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.25rem; }
+        .info-value { font-size: 1.1rem; font-weight: 600; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        
+        <!-- HEADER -->
+        <header>
+            <div class="progress-bar">
+                <div class="progress-fill" style="width: 20%;"></div>
+            </div>
+            <span class="badge badge-purple">First Principles</span>
+            <h1>What Is Nanobot?</h1>
+            <p style="font-size: 1.2rem; margin-top: 0.5rem;">An ultra-lightweight AI Agent that works like a thoughtful assistant</p>
+        </header>
+        
+        
+        <!-- QUESTION CALIBRATION -->
+        <section class="question-box">
+            <h3>Before we dive in — tell me about yourself:</h3>
+            
+            <h4>1. How lost do you feel about AI agents?</h4>
+            <div class="options">
+                <button class="option-btn">1 - Never heard of them</button>
+                <button class="option-btn">3</button>
+                <button class="option-btn selected">5 - Some context</button>
+                <button class="option-btn">7</button>
+                <button class="option-btn">10 - Expert</button>
+            </div>
+            
+            <h4>2. What's your programming experience?</h4>
+            <div class="options">
+                <button class="option-btn">Beginner</button>
+                <button class="option-btn">Some experience</button>
+                <button class="option-btn selected">Intermediate</button>
+                <button class="option-btn">Advanced</button>
+            </div>
+            
+            <h4>3. What do you want to understand?</h4>
+            <div class="options">
+                <button class="option-btn">Just the big picture</button>
+                <button class="option-btn selected">How it actually works</button>
+                <button class="option-btn">How to build on it</button>
+            </div>
+        </section>
+        
+        
+        <!-- ========================================
+             CONCEPT 1: THE CORE PROBLEM
+             ======================================== -->
+        <section class="card">
+            <div class="card-header">
+                <span class="badge badge-orange">Concept 1</span>
+                <h2>Why Does This Exist?</h2>
+            </div>
+            
+            <div class="problem-box">
+                <p><strong>The problem:</strong> Building AI agents that can actually do work is incredibly complex. Most frameworks are massive, require extensive setup, and become black boxes.</p>
+                <p>Think about what an AI agent needs to do:</p>
+                <ul style="margin: 1rem; color: var(--text-secondary);">
+                    <li>Understand what you want (interpret messages)</li>
+                    <li>Use tools (read files, run code, search the web)</li>
+                    <li>Remember context (keep track of conversation history)</li>
+                    <li>Handle errors gracefully (retry when things fail)</li>
+                    <li>Connect to different platforms (Slack, Discord, Telegram...)</li>
+                </ul>
+                <p>Most frameworks bundle all of this together in ways that are hard to understand or customize.</p>
+            </div>
+            
+            <div class="solution-box">
+                <p><strong>The solution: Nanobot</strong></p>
+                <p>Nanobot is designed to be <strong>ultra-lightweight</strong> and <strong>readable</strong>. The core agent loop is small enough to fit in your head. Yet it supports everything you need for a production AI assistant.</p>
+            </div>
+            
+            <div class="analogy-box">
+                <p><strong>Think of it like a restaurant kitchen:</strong></p>
+                <p>A big restaurant might have dozens of chefs, each doing tiny specialized tasks. But a small, efficient kitchen can produce amazing food with just a few skilled people.</p>
+                <p>Nanobot is that small, skilled kitchen — it keeps the core simple while still doing everything complex frameworks do.</p>
+            </div>
+        </section>
+        
+        
+        <!-- ========================================
+             CONCEPT 2: THE MENTAL MODEL
+             ======================================== -->
+        <section class="card">
+            <div class="card-header">
+                <span class="badge badge-purple">Concept 2</span>
+                <h2>The Mental Model: How Nanobot Thinks</h2>
+            </div>
+            
+            <div class="analogy-box">
+                <p><strong>Imagine you're a manager hiring a smart intern:</strong></p>
+                <p>You give the intern a goal, and they figure out how to achieve it. They might need to:</p>
+                <ul style="margin: 1rem 0 1rem 1rem; color: var(--text-secondary);">
+                    <li>Look something up online</li>
+                    <li>Read a file to understand the codebase</li>
+                    <li>Write some code to solve a problem</li>
+                    <li>Ask you clarifying questions</li>
+                </ul>
+                <p>The intern doesn't need to be told every single step — they figure out the details. You just judge whether the result is good.</p>
+            </div>
+            
+            <div class="flow-diagram">
+<pre>
+┌─────────────────────────────────────────────────────────────────┐
+│                    NANOBOT'S MENTAL MODEL                        │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│   YOU (User)                                                     │
+│      │                                                           │
+│      │ "Write tests for the login function"                     │
+│      ▼                                                           │
+│   ┌──────────────────────────────────────────────────────────┐   │
+│   │                    THE AGENT BRAIN                        │   │
+│   │                                                          │   │
+│   │   1. UNDERSTAND: What does the user want?                │   │
+│   │         ↓                                                 │   │
+│   │   2. PLAN: What tools do I need?                         │   │
+│   │         ↓                                                 │   │
+│   │   3. EXECUTE: Use tools one by one                        │   │
+│   │         ↓                                                 │   │
+│   │   4. EVALUATE: Is the job done?                          │   │
+│   │         ↓                                                 │   │
+│   │   5. REPEAT: Until goal is achieved                      │   │
+│   │                                                          │   │
+│   └──────────────────────────────────────────────────────────┘   │
+│      │                                                           │
+│      │ "Here are the tests I wrote"                            │
+│      ▼                                                           │
+│   YOU receive: ✓ Completed work                                  │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+</pre>
+            </div>
+            
+            <h3>The Core Loop</h3>
+            <p>This is the heart of Nanobot — it runs in a loop until the task is done:</p>
+            
+            <pre><code>loop:
+    user_message → think → decide → use_tool → get_result → repeat
+                                            ↓
+                                      If done, respond</code></pre>
+            
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="info-label">Think</div>
+                    <div class="info-value">"What should I do next?"</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Decide</div>
+                    <div class="info-value">"Should I use a tool or respond?"</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Use Tool</div>
+                    <div class="info-value">Read, write, search, execute...</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Repeat</div>
+                    <div class="info-value">Until task is complete</div>
+                </div>
+            </div>
+        </section>
+        
+        
+        <!-- ========================================
+             CONCEPT 3: THE ARCHITECTURE
+             ======================================== -->
+        <section class="card">
+            <div class="card-header">
+                <span class="badge badge-blue">Concept 3</span>
+                <h2>How It's Built: The Architecture</h2>
+            </div>
+            
+            <p>Let's look at the project structure and understand what each piece does:</p>
+            
+            <div class="flow-diagram">
+<pre>
+nanobot/
+│
+├── 📁 agent/              ← "The Brain"
+│   ├── loop.py           ← The main processing engine
+│   ├── runner.py         ← Runs the tool-using LLM loop
+│   ├── context.py        ← Builds prompts from history
+│   ├── memory.py         ← Stores conversation context
+│   ├── skills.py         ← Loads agent capabilities
+│   └── 📁 tools/         ← Individual tools (file, shell, web...)
+│
+├── 📁 bus/               ← "The Nervous System"
+│   ├── queue.py          ← Message queue (handles timing)
+│   └── events.py         ← Event types (inbound/outbound)
+│
+├── 📁 channels/          ← "The Senses & Voice"
+│   ├── telegram.py       ← Connect to Telegram
+│   ├── discord.py        ← Connect to Discord
+│   ├── feishu.py         ← Connect to Feishu
+│   └── ...               ← Many other platforms
+│
+├── 📁 providers/        ← "The Thinking Engine"
+│   ├── anthropic.py     ← Claude models
+│   ├── openai.py        ← GPT models
+│   └── ...               ← Many other providers
+│
+├── 📁 session/          ← "The Memory Bank"
+│   └── manager.py       ← Persists conversation history
+│
+└── 📁 config/          ← "The Settings"
+    └── schema.py        ← Configuration structure
+</pre>
+            </div>
+            
+            <h3>The Agent (Brain)</h3>
+            <p>The agent is where all the intelligence happens. Think of it like the conductor of an orchestra:</p>
+            
+            <div class="flow-diagram">
+<pre>
+┌─────────────────────────────────────────────────────────────┐
+│                      AGENT CORE                             │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│   ┌─────────────┐      ┌─────────────┐      ┌────────────┐ │
+│   │   Context   │ ───▶ │   Runner    │ ───▶ │   Tools    │ │
+│   │  Builder    │      │             │      │  Registry  │ │
+│   │             │      │             │      │            │ │
+│   │ Builds the  │      │ Runs the    │      │ What the   │ │
+│   │ prompt from │      │ agent loop: │      │ agent can  │ │
+│   │ history    │      │ think→act→  │      │ actually   │ │
+│   │ + memory   │      │ repeat      │      │ do         │ │
+│   └─────────────┘      └──────┬──────┘      └────────────┘ │
+│                              │                            │
+│         ┌────────────────────┼────────────────────┐     │
+│         │                    │                    │       │
+│         ▼                    ▼                    ▼       │
+│   ┌───────────┐        ┌───────────┐        ┌───────────┐│
+│   │  Memory   │        │  Skills   │        │   Hooks   ││
+│   │           │        │           │        │           ││
+│   │ Dream &   │        │ Built-in  │        │ Extend    ││
+│   │ Consolidator│      │ capabilities│        │ behavior  ││
+│   └───────────┘        └───────────┘        └───────────┘│
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+</pre>
+            </div>
+            
+            <h3>The Bus (Communication)</h3>
+            <p>Messages flow through the system like a nervous system:</p>
+            
+            <pre><code>InboundMessage (from user/channel)
+       │
+       ▼
+   MessageBus (queues messages)
+       │
+       ▼
+   AgentLoop (processes them)
+       │
+       ▼
+   OutboundMessage (response back)</code></pre>
+        </section>
+        
+        
+        <!-- ========================================
+             CONCEPT 4: THE AGENT LOOP DEEP DIVE
+             ======================================== -->
+        <section class="card">
+            <div class="card-header">
+                <span class="badge badge-green">Concept 4</span>
+                <h2>Inside the Agent Loop: Step by Step</h2>
+            </div>
+            
+            <p>Here's the actual code flow when a message comes in:</p>
+            
+            <div class="flow-diagram">
+<pre>
+┌─────────────────────────────────────────────────────────────┐
+│                  MESSAGE PROCESSING FLOW                     │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│   1. MESSAGE ARRIVES                                          │
+│      └─ InboundMessage: channel, content, sender_id           │
+│                                                              │
+│   2. SESSION LOOKUP                                           │
+│      └─ Get or create session for this conversation          │
+│      └─ Restore any checkpoint if interrupted                │
+│                                                              │
+│   3. CONTEXT BUILDING                                         │
+│      └─ Load conversation history                            │
+│      └─ Add skills (capabilities)                            │
+│      └─ Add memory (past learnings)                          │
+│      └─ Build system prompt with all of above                │
+│                                                              │
+│   4. RUN AGENT LOOP                                           │
+│      ┌────────────────────────────────────────────┐         │
+│      │  loop:                                     │         │
+│      │    LLM thinks...                          │         │
+│      │    if tool_call:                           │         │
+│      │        execute_tool()                      │         │
+│      │        return result to LLM               │         │
+│      │    elif response:                         │         │
+│      │        we're done!                        │         │
+│      │    repeat until done or max_iterations   │         │
+│      └────────────────────────────────────────────┘         │
+│                                                              │
+│   5. SAVE & RESPOND                                           │
+│      └─ Persist conversation to session                      │
+│      └─ Maybe consolidate memory                             │
+│      └─ Send response back to user                           │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+</pre>
+            </div>
+            
+            <h3>The Runner (Tool Execution)</h3>
+            <p>The runner handles the actual tool-calling loop. Let's trace through it:</p>
+            
+            <pre><code># Pseudocode for the agent runner
+async def run():
+    messages = build_prompt()  # System + history + current message
+    
+    for iteration in range(max_iterations):
+        # 1. Call the LLM with current messages
+        response = await llm.chat(messages)
+        
+        # 2. If LLM wants to use a tool...
+        if response.tool_calls:
+            for tool_call in response.tool_calls:
+                result = await execute_tool(tool_call)
+                messages.append(result)  # Add tool result to history
+            continue  # Keep looping with new info
+        
+        # 3. If LLM gives a text response, we're done!
+        return response.content</code></pre>
+            
+            <div class="analogy-box">
+                <p><strong>Think of it like debugging with a partner:</strong></p>
+                <p>You tell your partner what you want. They say "I'll need to check a few files." They read the files, come back with questions, read more files, and eventually give you an answer.</p>
+                <p>Each file read is a "tool call" — the agent gathering information before responding.</p>
+            </div>
+        </section>
+        
+        
+        <!-- ========================================
+             CONCEPT 5: THE TOOLS
+             ======================================== -->
+        <section class="card">
+            <div class="card-header">
+                <span class="badge badge-orange">Concept 5</span>
+                <h2>The Tools: What the Agent Can Do</h2>
+            </div>
+            
+            <p>Nanobot has a rich set of tools the agent can use. Think of them as the agent's "hands":</p>
+            
+            <div class="concept-grid">
+                <div class="concept-card">
+                    <div class="concept-icon">📁</div>
+                    <div class="concept-name">File Tools</div>
+                    <div class="concept-desc">read_file, write_file, edit_file, list_dir, glob, grep</div>
+                </div>
+                <div class="concept-card">
+                    <div class="concept-icon">💻</div>
+                    <div class="concept-name">Shell</div>
+                    <div class="concept-desc">Execute commands in sandbox</div>
+                </div>
+                <div class="concept-card">
+                    <div class="concept-icon">🌐</div>
+                    <div class="concept-name">Web</div>
+                    <div class="concept-desc">web_search, web_fetch</div>
+                </div>
+                <div class="concept-card">
+                    <div class="concept-icon">📨</div>
+                    <div class="concept-name">Message</div>
+                    <div class="concept-desc">Send messages to channels</div>
+                </div>
+                <div class="concept-card">
+                    <div class="concept-icon">🔄</div>
+                    <div class="concept-name">Spawn</div>
+                    <div class="concept-desc">Create sub-agents for parallel work</div>
+                </div>
+                <div class="concept-card">
+                    <div class="concept-icon">⏰</div>
+                    <div class="concept-name">Cron</div>
+                    <div class="concept-desc">Schedule future tasks</div>
+                </div>
+            </div>
+            
+            <h3>Tool Structure</h3>
+            <p>Each tool follows a simple pattern:</p>
+            
+            <pre><code>class Tool:
+    name: str           # "read_file"
+    description: str    # "Read contents of a file"
+    parameters: dict    # schema for what it needs
+    
+    async def execute(self, **kwargs) -> str:
+        # Do the actual work
+        return result</code></pre>
+            
+            <h3>The Tool Registry</h3>
+            <p>All tools are registered in a central registry that the agent can query:</p>
+            
+            <pre><code>ToolRegistry:
+    tools: dict[str, Tool]
+    
+    def get(self, name: str) -> Tool | None
+    def get_definitions(self) -> list[dict]  # For LLM
+    def register(self, tool: Tool) -> None</code></pre>
+        </section>
+        
+        
+        <!-- ========================================
+             CONCEPT 6: MEMORY SYSTEM
+             ======================================== -->
+        <section class="card">
+            <div class="card-header">
+                <span class="badge badge-purple">Concept 6</span>
+                <h2>The Memory: How It Remembers</h2>
+            </div>
+            
+            <p>Nanobot has a sophisticated memory system with multiple layers:</p>
+            
+            <div class="flow-diagram">
+<pre>
+┌─────────────────────────────────────────────────────────────┐
+│                   MEMORY LAYERS                              │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │                    SHORT-TERM                            ││
+│  │              (Conversation History)                     ││
+│  │                                                         ││
+│  │  Messages: [user, assistant, user, assistant, tool...]  ││
+│  │                                                         ││
+│  │  • Full conversation in current session                 ││
+│  │  • Gets large over time → needs compaction              ││
+│  └─────────────────────────────────────────────────────────┘│
+│                           │                                 │
+│                           ▼                                 │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │                    LONG-TERM                            ││
+│  │                  (Dream Memory)                          ││
+│  │                                                         ││
+│  │  "Dream" consolidates important info:                   ││
+│  │  • "User prefers Python over JavaScript"                ││
+│  │  • "Project uses Django, not Flask"                     ││
+│  │                                                         ││
+│  │  • Periodic summarization of session history            ││
+│  │  • Persisted to disk, loaded on startup                ││
+│  └─────────────────────────────────────────────────────────┘│
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+</pre>
+            </div>
+            
+            <h3>The Consolidator</h3>
+            <p>When conversations get long, the consolidator kicks in to summarize and compress:</p>
+            
+            <pre><code>Consolidator:
+    - Watches token count in conversation
+    - When near limit: summarizes old messages
+    - Keeps recent context fresh, compresses old history
+    - Called automatically when session is loaded</code></pre>
+            
+            <h3>Auto-Compact</h3>
+            <p>Like cleaning out a cluttered desk:</p>
+            
+            <div class="analogy-box">
+                <p><strong>Think of it like a messy desk:</strong></p>
+                <p>At first, you have everything spread out (full conversation). But as it gets full, you need to clean up — put papers in folders, throw away junk. The AutoCompact does this for the agent's memory.</p>
+            </div>
+        </section>
+        
+        
+        <!-- ========================================
+             CONCEPT 7: CHANNELS
+             ======================================== -->
+        <section class="card">
+            <div class="card-header">
+                <span class="badge badge-blue">Concept 7</span>
+                <h2>Channels: How Users Talk To It</h2>
+            </div>
+            
+            <p>Nanobot supports many chat platforms. Each channel is an adapter that converts platform-specific formats into a unified format:</p>
+            
+            <div class="concept-grid">
+                <div class="concept-card">
+                    <div class="concept-icon">💬</div>
+                    <div class="concept-name">Telegram</div>
+                </div>
+                <div class="concept-card">
+                    <div class="concept-icon">🎮</div>
+                    <div class="concept-name">Discord</div>
+                </div>
+                <div class="concept-card">
+                    <div class="concept-icon">📱</div>
+                    <div class="concept-name">Feishu</div>
+                </div>
+                <div class="concept-card">
+                    <div class="concept-icon">💼</div>
+                    <div class="concept-name">Slack</div>
+                </div>
+                <div class="concept-card">
+                    <div class="concept-icon">💻</div>
+                    <div class="concept-name">CLI</div>
+                </div>
+                <div class="concept-card">
+                    <div class="concept-icon">🌐</div>
+                    <div class="concept-name">WebSocket</div>
+                </div>
+            </div>
+            
+            <h3>Channel Adapter Pattern</h3>
+            <p>Each channel implements the same interface:</p>
+            
+            <pre><code>Channel Adapter:
+    - Receives platform-specific message format
+    - Converts to: InboundMessage
+    - Receives: OutboundMessage
+    - Converts to: platform-specific format
+    - Sends to user</code></pre>
+            
+            <div class="analogy-box">
+                <p><strong>Think of it like a universal translator:</strong></p>
+                <p>English speaker → Translator → Chinese speaker</p>
+                <p>Discord message → Channel Adapter → Nanobot understands it</p>
+                <p>Nanobot responds → Channel Adapter → Discord message</p>
+            </div>
+        </section>
+        
+        
+        <!-- ========================================
+             CONCEPT 8: PROVIDERS
+             ======================================== -->
+        <section class="card">
+            <div class="card-header">
+                <span class="badge badge-green">Concept 8</span>
+                <h2>Providers: The Thinking Engines</h2>
+            </div>
+            
+            <p>Nanobot can use different AI providers (LLMs) as its "brain". Each provider is an adapter for a specific API:</p>
+            
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="info-label">Anthropic</div>
+                    <div class="info-value">Claude models ( Opus, Sonnet, Haiku )</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">OpenAI</div>
+                    <div class="info-value">GPT-4, GPT-3.5, Codex</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Azure OpenAI</div>
+                    <div class="info-value">OpenAI via Azure</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">DeepSeek</div>
+                    <div class="info-value">DeepSeek models</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Local (vLLM/Ollama)</div>
+                    <div class="info-value">Self-hosted models</div>
+                </div>
+            </div>
+            
+            <h3>Provider Interface</h3>
+            <p>All providers implement the same interface, so you can swap them:</p>
+            
+            <pre><code>LLMProvider:
+    async def chat(messages, tools, model) -> LLMResponse
+    async def complete(prompt, ...) -> str
+    def get_default_model() -> str</code></pre>
+            
+            <div class="analogy-box">
+                <p><strong>Think of it like a car engine:</strong></p>
+                <p>You don't care if it's a V6 or V8 or electric motor — you just need it to move the car. Providers are the same: you call <code>llm.chat()</code> and get a response, regardless of whether it's Claude or GPT under the hood.</p>
+            </div>
+        </section>
+        
+        
+        <!-- ========================================
+             CONCEPT 9: THE SKILLS SYSTEM
+             ======================================== -->
+        <section class="card">
+            <div class="card-header">
+                <span class="badge badge-orange">Concept 9</span>
+                <h2>Skills: Extending Capabilities</h2>
+            </div>
+            
+            <p>Skills are like plugins that give the agent additional capabilities. They can be loaded from the filesystem:</p>
+            
+            <div class="flow-diagram">
+<pre>
+SKILLS STRUCTURE:
+
+.nanobot/skills/
+├── skill-name/
+│   ├── SKILL.md        ← Definition & instructions
+│   ├── template.md     ← Optional templates
+│   └── resources/      ← Optional files
+└── another-skill/
+    └── ...
+</pre>
+            </div>
+            
+            <h3>Skill Discovery (Dream)</h3>
+            <p>New in v0.1.5.post1 — the agent can discover and learn new skills on the fly:</p>
+            
+            <pre><code>Dream (in memory.py):
+    - Two-stage discovery process
+    - Learns about available skills
+    - Can use discovered skills in context</code></pre>
+            
+            <h3>Built-in Skills</h3>
+            <p>Some skills are always loaded (in <code>nanobot/agent/skills/</code>):</p>
+            <ul style="margin: 1rem; color: var(--text-secondary);">
+                <li>Context management</li>
+                <li>Task planning</li>
+                <li>Code execution</li>
+            </ul>
+        </section>
+        
+        
+        <!-- ========================================
+             CONCEPT 10: SESSION & PERSISTENCE
+             ======================================== -->
+        <section class="card">
+            <div class="card-header">
+                <span class="badge badge-purple">Concept 10</span>
+                <h2>Sessions: Keeping Track of Conversations</h2>
+            </div>
+            
+            <p>Each conversation lives in a Session. Sessions are persisted so the agent can resume after restart:</p>
+            
+            <pre><code>Session:
+    key: str              # "telegram:chat123"
+    messages: list        # Full conversation history
+    metadata: dict        # Checkpoint info, etc.
+    
+    # Methods:
+    get_history()         # Get all messages
+    add_message()         # Add to conversation
+    save()                # Persist to disk
+    restore()             # Load from disk</code></pre>
+            
+            <h3>Checkpoint System</h3>
+            <p>If the agent crashes mid-turn, it can recover:</p>
+            
+            <div class="flow-diagram">
+<pre>
+CRASH RECOVERY FLOW:
+
+1. Agent starts processing message
+       │
+2. Save checkpoint (assistant message + tool state)
+       │
+3. Agent crashes (OOM, SIGKILL, etc.)
+       │
+4. Agent restarts, loads session
+       │
+5. Restore checkpoint → replay into messages
+       │
+6. Continue from where we left off ✓</pre>
+            </div>
+            
+            <div class="analogy-box">
+                <p><strong>Think of it like auto-save in video games:</strong></p>
+                <p>You don't lose progress when the game crashes because it saved automatically. The checkpoint system does the same for the agent.</p>
+            </div>
+        </section>
+        
+        
+        <!-- ========================================
+             CONCEPT 11: MCP INTEGRATION
+             ======================================== -->
+        <section class="card">
+            <div class="card-header">
+                <span class="badge badge-blue">Concept 11</span>
+                <h2>MCP: Model Context Protocol</h2>
+            </div>
+            
+            <p>Nanobot supports MCP servers, which is a standard way to give AI models additional capabilities:</p>
+            
+            <pre><code># In config:
+mcp_servers:
+  - name: "filesystem"
+    command: "npx @modelcontextprotocol/server-filesystem"
+  - name: "github"  
+    command: "npx @modelcontextprotocol/server-github"</code></pre>
+            
+            <p>MCP tools appear alongside built-in tools, seamlessly integrated into the agent's toolkit.</p>
+            
+            <div class="analogy-box">
+                <p><strong>Think of it like plugging in a USB device:</strong></p>
+                <p>You connect a new device (MCP server), and it immediately works with your computer (Nanobot). The agent can use new tools without any extra configuration.</p>
+            </div>
+        </section>
+        
+        
+        <!-- ========================================
+             PUTTING IT ALL TOGETHER
+             ======================================== -->
+        <section class="card">
+            <div class="card-header">
+                <span class="badge badge-green">Putting It Together</span>
+                <h2>The Complete Flow</h2>
+            </div>
+            
+            <p>Now let's trace a complete request through the system:</p>
+            
+            <div class="flow-diagram">
+<pre>
+┌─────────────────────────────────────────────────────────────────────┐
+│                   COMPLETE REQUEST FLOW                                │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  USER (Telegram) sends: "Read my README.md"                          │
+│                                                                      │
+│  1. Telegram Channel receives message                               │
+│     └─ Converts to InboundMessage                                   │
+│     └─ Publishes to MessageBus                                      │
+│                                                                      │
+│  2. AgentLoop consumes from bus                                    │
+│     └─ Looks up/create session for this user                       │
+│     └─ Builds context (history + skills + memory)                  │
+│                                                                      │
+│  3. AgentRunner runs the loop:                                     │
+│     └─ Call Claude with: system_prompt + history + "Read README"   │
+│     └─ Claude responds: tool_call(read_file, path="README.md")      │
+│     └─ Runner executes tool                                        │
+│     └─ Runner returns result to Claude                             │
+│     └─ Claude responds with file contents                           │
+│                                                                      │
+│  4. AgentLoop saves turn to session                                 │
+│     └─ Maybe compact if history is long                            │
+│                                                                      │
+│  5. Response published to bus                                      │
+│     └─ Telegram channel converts to Telegram format                │
+│     └─ Sends message back to user                                   │
+│                                                                      │
+│  USER sees: 📄 README.md contents...                                 │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+</pre>
+            </div>
+            
+            <h3>Key Files</h3>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>File</th>
+                            <th>Purpose</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>agent/loop.py</code></td>
+                            <td>Main processing engine - receives messages, coordinates everything</td>
+                        </tr>
+                        <tr>
+                            <td><code>agent/runner.py</code></td>
+                            <td>The tool-calling loop - calls LLM, executes tools, handles retries</td>
+                        </tr>
+                        <tr>
+                            <td><code>agent/context.py</code></td>
+                            <td>Builds prompts from history, skills, and memory</td>
+                        </tr>
+                        <tr>
+                            <td><code>agent/memory.py</code></td>
+                            <td>Dream consolidator and memory store</td>
+                        </tr>
+                        <tr>
+                            <td><code>bus/queue.py</code></td>
+                            <td>Message queue for async communication</td>
+                        </tr>
+                        <tr>
+                            <td><code>session/manager.py</code></td>
+                            <td>Session persistence and checkpointing</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+        
+        
+        <!-- INTERACTIVE CHECK -->
+        <section class="question-box">
+            <h3>How's that understanding? 🤔</h3>
+            <div class="options">
+                <button class="option-btn">✓ Clear - next topic</button>
+                <button class="option-btn">Got it, but want more detail on X</button>
+                <button class="option-btn">Still confused about Y</button>
+                <button class="option-btn">Show me the actual code for this</button>
+            </div>
+        </section>
+        
+        
+        <!-- QUICK START -->
+        <section class="card">
+            <div class="card-header">
+                <span class="badge badge-blue">Quick Start</span>
+                <h2>Try It Yourself</h2>
+            </div>
+            
+            <p>Here's how to run nanobot:</p>
+            
+            <pre><code># Install
+pip install nanobot-ai
+
+# Configure (creates .nanobot.yaml)
+nanobot setup
+
+# Run
+nanobot
+
+# Or with Docker
+docker run -v ~/.nanobot:/app/.nanobot ghiku/nanobot</code></pre>
+            
+            <h3>Configuration (./nanobot.yaml)</h3>
+            <pre><code>provider:
+  type: anthropic  # or openai, deepseek, etc.
+  model: claude-sonnet-4-20250514
+  
+channels:
+  telegram:
+    bot_token: "your-token"
+  
+tools:
+  exec:
+    enable: true
+    sandbox: true  # Safe execution</code></pre>
+        </section>
+        
+        
+        <!-- COMPARISON -->
+        <section class="card">
+            <div class="card-header">
+                <span class="badge badge-purple">Context</span>
+                <h2>How Does It Compare?</h2>
+            </div>
+            
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Feature</th>
+                            <th>Nanobot</th>
+                            <th>LangChain</th>
+                            <th>Claude Code</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Core loop size</td>
+                            <td>~500 lines</td>
+                            <td>Thousands</td>
+                            <td>Closed</td>
+                        </tr>
+                        <tr>
+                            <td>Readability</td>
+                            <td>✓✓✓ High</td>
+                            <td>✓ Complex</td>
+                            <td>N/A</td>
+                        </tr>
+                        <tr>
+                            <td>Multi-channel</td>
+                            <td>✓✓✓ 10+</td>
+                            <td>✓ Some</td>
+                            <td>CLI only</td>
+                        </tr>
+                        <tr>
+                            <td>Memory system</td>
+                            <td>✓ Dream</td>
+                            <td>✓ Built-in</td>
+                            <td>Basic</td>
+                        </tr>
+                        <tr>
+                            <td>Skills/plugin system</td>
+                            <td>✓✓ File-based</td>
+                            <td>✓✓ Complex</td>
+                            <td>✗</td>
+                        </tr>
+                        <tr>
+                            <td>Checkpoint/recovery</td>
+                            <td>✓✓ Yes</td>
+                            <td>✓ Some</td>
+                            <td>✗</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <blockquote>
+                "Nanobot keeps the core agent loop small and readable while still supporting chat channels, memory, MCP, and practical deployment paths."
+                <br>— README.md
+            </blockquote>
+        </section>
+        
+        
+        <!-- NAVIGATION -->
+        <nav class="nav-footer">
+            <button class="nav-btn secondary">← Previous</button>
+            <span style="color: var(--text-secondary); font-size: 0.85rem;">11 concepts covered</span>
+            <button class="nav-btn" disabled>Next →</button>
+        </nav>
+        
+    </div>
+</body>
+</html>
