@@ -21,37 +21,64 @@ export default function BatchDetail() {
   const [batch, setBatch] = useState(null)
   const [records, setRecords] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  const [recordPage, setRecordPage] = useState(1)
+  const [recordsTotal, setRecordsTotal] = useState(0)
+  const [recordsHasNext, setRecordsHasNext] = useState(false)
+  const [recordsHasPrev, setRecordsHasPrev] = useState(false)
+  const [pendingCount, setPendingCount] = useState(0)
+  const [flaggedCount, setFlaggedCount] = useState(0)
+  const [approvedCount, setApprovedCount] = useState(0)
   const [showFlagModal, setShowFlagModal] = useState(false)
   const [flaggingRecord, setFlaggingRecord] = useState(null)
   const [flagReason, setFlagReason] = useState('')
   const [flagType, setFlagType] = useState('OTHER')
   const [actionLoading, setActionLoading] = useState(false)
 
-  const fetchData = async () => {
+  const getCount = (response) => {
+    if (response && typeof response.count === 'number') return response.count
+    if (Array.isArray(response)) return response.length
+    return Array.isArray(response?.results) ? response.results.length : 0
+  }
+
+  const fetchData = async (targetPage = recordPage) => {
+    setLoading(true)
+    setError('')
     try {
-      const [batchData, recordsData] = await Promise.all([
+      const [batchData, recordsData, pendingData, flaggedData, approvedData] = await Promise.all([
         getBatch(id),
-        getBatchRecords(id, statusFilter)
+        getBatchRecords(id, statusFilter, targetPage),
+        getBatchRecords(id, 'PENDING', 1),
+        getBatchRecords(id, 'FLAGGED', 1),
+        getBatchRecords(id, 'APPROVED', 1),
       ])
       setBatch(batchData)
-      setRecords(Array.isArray(recordsData) ? recordsData : recordsData.results || [])
+      const pageRecords = Array.isArray(recordsData) ? recordsData : recordsData.results || []
+      setRecords(pageRecords)
+      setRecordsTotal(getCount(recordsData))
+      setRecordsHasNext(Boolean(recordsData?.next))
+      setRecordsHasPrev(Boolean(recordsData?.previous))
+      setPendingCount(getCount(pendingData))
+      setFlaggedCount(getCount(flaggedData))
+      setApprovedCount(getCount(approvedData))
     } catch (err) {
       console.error('Failed to fetch:', err)
+      setError(err.message || 'Failed to fetch batch data')
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    fetchData()
-  }, [id, statusFilter])
+    fetchData(recordPage)
+  }, [id, statusFilter, recordPage])
 
   const handleApproveRecord = async (recordId) => {
     setActionLoading(true)
     try {
       await approveRecord(recordId)
-      fetchData()
+      fetchData(recordPage)
     } catch (err) {
       console.error('Failed to approve:', err)
     } finally {
@@ -63,7 +90,7 @@ export default function BatchDetail() {
     setActionLoading(true)
     try {
       await rejectRecord(recordId)
-      fetchData()
+      fetchData(recordPage)
     } catch (err) {
       console.error('Failed to reject:', err)
     } finally {
@@ -84,7 +111,7 @@ export default function BatchDetail() {
     try {
       await flagRecord(flaggingRecord.id, flagType, flagReason)
       setShowFlagModal(false)
-      fetchData()
+      fetchData(recordPage)
     } catch (err) {
       console.error('Failed to flag:', err)
     } finally {
@@ -97,7 +124,7 @@ export default function BatchDetail() {
     setActionLoading(true)
     try {
       await approveBatch(id)
-      fetchData()
+      fetchData(recordPage)
     } catch (err) {
       console.error('Failed to approve batch:', err)
     } finally {
@@ -107,8 +134,6 @@ export default function BatchDetail() {
 
   if (loading) return <div className="loading">Loading...</div>
   if (!batch) return <div className="error">Batch not found</div>
-
-  const pendingCount = records.filter(r => r.status === 'PENDING').length
 
   return (
     <div style={{ padding: '24px', maxWidth: '1400px', margin: '0 auto' }}>
@@ -144,23 +169,28 @@ export default function BatchDetail() {
           </button>
         )}
       </header>
+      {error && (
+        <div style={{ marginBottom: '16px', background: '#fee2e2', color: '#b91c1c', padding: '10px 12px', borderRadius: '8px', fontSize: '0.875rem' }}>
+          {error}
+        </div>
+      )}
 
       {/* Stats Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
         <div style={{ background: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-          <div style={{ fontSize: '2rem', fontWeight: '600', color: '#1e293b' }}>{records.length}</div>
+          <div style={{ fontSize: '2rem', fontWeight: '600', color: '#1e293b' }}>{batch.rows_total}</div>
           <div style={{ color: '#64748b', fontSize: '0.875rem' }}>Total Records</div>
         </div>
         <div style={{ background: '#fef3c7', padding: '20px', borderRadius: '12px' }}>
-          <div style={{ fontSize: '2rem', fontWeight: '600', color: '#f59e0b' }}>{records.filter(r => r.status === 'PENDING').length}</div>
+          <div style={{ fontSize: '2rem', fontWeight: '600', color: '#f59e0b' }}>{pendingCount}</div>
           <div style={{ color: '#92400e', fontSize: '0.875rem' }}>Pending</div>
         </div>
         <div style={{ background: '#fee2e2', padding: '20px', borderRadius: '12px' }}>
-          <div style={{ fontSize: '2rem', fontWeight: '600', color: '#ef4444' }}>{records.filter(r => r.status === 'FLAGGED').length}</div>
+          <div style={{ fontSize: '2rem', fontWeight: '600', color: '#ef4444' }}>{flaggedCount}</div>
           <div style={{ color: '#991b1b', fontSize: '0.875rem' }}>Flagged</div>
         </div>
         <div style={{ background: '#d1fae5', padding: '20px', borderRadius: '12px' }}>
-          <div style={{ fontSize: '2rem', fontWeight: '600', color: '#10b981' }}>{records.filter(r => r.status === 'APPROVED').length}</div>
+          <div style={{ fontSize: '2rem', fontWeight: '600', color: '#10b981' }}>{approvedCount}</div>
           <div style={{ color: '#065f46', fontSize: '0.875rem' }}>Approved</div>
         </div>
       </div>
@@ -170,7 +200,10 @@ export default function BatchDetail() {
         {['', 'PENDING', 'FLAGGED', 'APPROVED', 'REJECTED'].map(filter => (
           <button
             key={filter || 'ALL'}
-            onClick={() => setStatusFilter(filter)}
+            onClick={() => {
+              setStatusFilter(filter)
+              setRecordPage(1)
+            }}
             style={{
               padding: '6px 12px',
               background: statusFilter === filter ? '#3b82f6' : 'white',
@@ -220,7 +253,7 @@ export default function BatchDetail() {
                     {record.raw_value} {record.raw_unit}
                   </td>
                   <td style={{ padding: '16px', textAlign: 'right', fontSize: '0.875rem', fontWeight: '500' }}>
-                    {record.normalized_value ? record.normalized_value.toFixed(2) : '—'}
+                    {Number.isFinite(Number(record.normalized_value)) ? Number(record.normalized_value).toFixed(2) : '—'}
                   </td>
                   <td style={{ padding: '16px', textAlign: 'center', fontSize: '0.75rem' }}>
                     <span style={{ 
@@ -295,6 +328,41 @@ export default function BatchDetail() {
             })}
           </tbody>
         </table>
+      </div>
+      <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ color: '#64748b', fontSize: '0.875rem' }}>
+          Showing {records.length} of {recordsTotal} records{statusFilter ? ` (${statusFilter})` : ''}
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            onClick={() => setRecordPage(p => Math.max(1, p - 1))}
+            disabled={!recordsHasPrev || loading}
+            style={{
+              padding: '6px 12px',
+              border: '1px solid #e2e8f0',
+              borderRadius: '6px',
+              background: recordsHasPrev ? 'white' : '#f1f5f9',
+              color: '#334155',
+              cursor: recordsHasPrev ? 'pointer' : 'not-allowed'
+            }}
+          >
+            Previous
+          </button>
+          <button
+            onClick={() => setRecordPage(p => p + 1)}
+            disabled={!recordsHasNext || loading}
+            style={{
+              padding: '6px 12px',
+              border: '1px solid #e2e8f0',
+              borderRadius: '6px',
+              background: recordsHasNext ? 'white' : '#f1f5f9',
+              color: '#334155',
+              cursor: recordsHasNext ? 'pointer' : 'not-allowed'
+            }}
+          >
+            Next
+          </button>
+        </div>
       </div>
 
       {/* Flag Modal */}

@@ -3,6 +3,8 @@ Utility functions for emissions calculation.
 """
 
 from math import radians, sin, cos, sqrt, atan2
+from datetime import date
+from decimal import Decimal
 
 # IATA airport coordinates (lat, lon in degrees)
 # Sourced from openflights.org database
@@ -142,3 +144,79 @@ def get_iata_distance(origin_code, destination_code):
         origin_coords[0], origin_coords[1],
         dest_coords[0], dest_coords[1]
     )
+
+
+def prorate_billing_period(billing_start, billing_end, consumption_kwh):
+    """
+    Prorate utility consumption to calendar months when billing period
+    doesn't align with calendar months (e.g., UK utilities use 23rd-to-22nd).
+
+    UK utilities commonly bill from 23rd of one month to 22nd of the next.
+    For ESG reporting, we need to align consumption to calendar months.
+
+    Args:
+        billing_start: date object for billing period start
+        billing_end: date object for billing period end
+        consumption_kwh: total consumption for the billing period
+
+    Returns:
+        List of dicts: [{'year': Y, 'month': M, 'prorated_kwh': K, 'days_in_period': D}, ...]
+
+    Example:
+        Billing: Jan 23 - Feb 22 (31 days total)
+        Jan portion: 9 days (Jan 23-31) / 31 * total_kwh
+        Feb portion: 22 days (Feb 1-22) / 31 * total_kwh
+    """
+    from calendar import monthrange
+
+    if not billing_start or not billing_end or not consumption_kwh:
+        return []
+
+    # Check if already calendar-aligned (start is 1st of month, end is last day of month)
+    first_day_of_month = billing_start.day == 1
+    last_day_of_month = billing_end.day == monthrange(billing_end.year, billing_end.month)[1]
+
+    if first_day_of_month and last_day_of_month:
+        # Calendar aligned - no proration needed
+        return [{
+            'year': billing_start.year,
+            'month': billing_start.month,
+            'prorated_kwh': consumption_kwh,
+            'days_in_period': (billing_end - billing_start).days + 1
+        }]
+
+    # Misaligned - need proration
+    result = []
+    current = billing_start
+
+    while current <= billing_end:
+        # Find the end of this calendar month
+        _, last_day = monthrange(current.year, current.month)
+        month_end = min(
+            date(current.year, current.month, last_day),
+            billing_end
+        )
+
+        # Count days in this calendar month that fall within billing period
+        days_in_period = (month_end - current).days + 1
+        total_billing_days = (billing_end - billing_start).days + 1
+
+        # Prorate consumption
+        prorated = consumption_kwh * Decimal(str(days_in_period)) / Decimal(str(total_billing_days))
+
+        result.append({
+            'year': current.year,
+            'month': current.month,
+            'prorated_kwh': prorated,
+            'days_in_period': days_in_period
+        })
+
+        # Move to first day of next month
+        if month_end >= billing_end:
+            break
+        if current.month == 12:
+            current = date(current.year + 1, 1, 1)
+        else:
+            current = date(current.year, current.month + 1, 1)
+
+    return result

@@ -1,65 +1,76 @@
-const API_BASE = 'http://localhost:8000/api'
+const API_BASE = (import.meta.env.VITE_API_BASE || '/api').replace(/\/+$/, '')
 
-export async function getBatches() {
-  const res = await fetch(`${API_BASE}/batches/`)
-  return res.json()
+async function requestJson(path, options = {}) {
+  const res = await fetch(`${API_BASE}${path}`, options)
+  let payload = null
+  try {
+    payload = await res.json()
+  } catch {
+    payload = null
+  }
+
+  if (!res.ok) {
+    const message = payload?.error || payload?.detail || `Request failed (${res.status})`
+    const error = new Error(message)
+    error.status = res.status
+    error.payload = payload
+    throw error
+  }
+
+  return payload
+}
+
+export async function getBatches(page = 1) {
+  return requestJson(`/batches/?page=${page}`)
 }
 
 export async function getBatch(id) {
-  const res = await fetch(`${API_BASE}/batches/${id}/`)
-  return res.json()
+  return requestJson(`/batches/${id}/`)
 }
 
-export async function getBatchRecords(id, status) {
-  const url = status 
-    ? `${API_BASE}/batches/${id}/records/?status=${status}`
-    : `${API_BASE}/batches/${id}/records/`
-  const res = await fetch(url)
-  return res.json()
+export async function getBatchRecords(id, status, page = 1) {
+  const params = new URLSearchParams({ page: String(page) })
+  if (status) params.set('status', status)
+  return requestJson(`/batches/${id}/records/?${params.toString()}`)
 }
 
 export async function uploadCSV(sourceType, file) {
   const formData = new FormData()
   formData.append('file', file)
-  const res = await fetch(`${API_BASE}/upload-${sourceType}/`, {
+  return requestJson(`/upload/${sourceType}/`, {
     method: 'POST',
     body: formData,
   })
-  return res.json()
 }
 
 export async function approveRecord(id, performedBy = 'analyst', note = '') {
-  const res = await fetch(`${API_BASE}/records/${id}/approve/`, {
+  return requestJson(`/records/${id}/approve/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ performed_by: performedBy, note }),
   })
-  return res.json()
 }
 
 export async function flagRecord(id, flagType, flagReason, performedBy = 'analyst') {
-  const res = await fetch(`${API_BASE}/records/${id}/flag/`, {
+  return requestJson(`/records/${id}/flag/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ flag_type: flagType, flag_reason: flagReason, performed_by: performedBy }),
   })
-  return res.json()
 }
 
 export async function rejectRecord(id, performedBy = 'analyst', note = '') {
-  const res = await fetch(`${API_BASE}/records/${id}/reject/`, {
+  return requestJson(`/records/${id}/reject/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ performed_by: performedBy, note }),
   })
-  return res.json()
 }
 
 export async function approveBatch(id, performedBy = 'analyst', note = '') {
-  const res = await fetch(`${API_BASE}/batches/${id}/approve_batch/`, {
+  return requestJson(`/batches/${id}/approve-batch/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ performed_by: performedBy, note }),
   })
-  return res.json()
 }

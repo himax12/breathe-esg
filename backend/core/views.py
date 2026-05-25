@@ -7,7 +7,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db.models import Sum
-from django.db import models
+from django.db import models, transaction, OperationalError
 
 from .models import ImportBatch, EmissionRecord, DataFlag, ApprovalLog
 from .serializers import ImportBatchSerializer, EmissionRecordSerializer, ApprovalLogSerializer
@@ -40,6 +40,29 @@ DEFAULT_FLAG_RULES = [
     {'source_type': 'UTILITY_ELECTRICITY', 'field_name': 'consumption_kwh', 'rule_type': 'MAX_VALUE', 'threshold_value': '50000'},
     {'source_type': 'CORPORATE_TRAVEL', 'field_name': 'distance_km', 'rule_type': 'REQUIRED', 'threshold_value': None},
 ]
+
+REQUIRED_COLUMNS = {
+    'SAP_FUEL': ['WERKS', 'BWART', 'MATNR', 'MENGE', 'MEINS', 'BUDAT'],
+    'SAP_PROCUREMENT': ['WERKS', 'MATNR', 'MENGE', 'MEINS', 'BUDAT'],
+    'UTILITY_ELECTRICITY': [
+        'meter_id',
+        'billing_period_start',
+        'billing_period_end',
+        'consumption_kwh',
+        'demand_kva',
+        'tariff_code',
+    ],
+    'CORPORATE_TRAVEL': [
+        'employee_id',
+        'trip_date',
+        'category',
+        'origin',
+        'destination',
+        'distance_km',
+        'amount_local',
+        'currency',
+    ],
+}
 
 
 def get_flag_score(record_data, source_type):
@@ -94,7 +117,7 @@ def normalize_record(record_data, source_type):
             normalized_value = menge * conversion_factor
             normalized_unit = factor_data['unit']
             scope = 'SCOPE_1'
-            activity_type = 'diesel_combustion' if 'diesel' not in matnr else 'gasoline_combustion'
+            activity_type = 'gasoline_combustion' if factor_data is NORMALIZATION_FACTORS['SAP_FUEL']['gasoline'] else 'diesel_combustion'
         except (InvalidOperation, TypeError):
             pass
     
@@ -113,6 +136,7 @@ def normalize_record(record_data, source_type):
     
     elif source_type == 'CORPORATE_TRAVEL':
         category = str(record_data.get('category', '')).upper()
+        factor_data = None
         try:
             distance = Decimal(str(record_data.get('distance_km', 0)))
 
@@ -142,8 +166,8 @@ def normalize_record(record_data, source_type):
                 normalized_unit = factor_data['unit']
                 conversion_factor = factor_data['factor']
                 factor_source = factor_data['source']
-            scope = 'SCOPE_3'
-            activity_type = f"{category.lower()}_travel"
+                scope = 'SCOPE_3'
+                activity_type = f"{category.lower()}_travel"
         except (InvalidOperation, TypeError):
             pass
     
@@ -191,48 +215,106 @@ class ImportBatchViewSet(viewsets.ModelViewSet):
         status_filter = request.query_params.get('status')
         if status_filter:
             records = records.filter(status=status_filter.upper())
+        page = self.paginate_queryset(records)
+        if page is not None:
+            serializer = EmissionRecordSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
         serializer = EmissionRecordSerializer(records, many=True)
         return Response(serializer.data)
     
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=['post'], url_path=r'approve[-_]batch')
     def approve_batch(self, request, pk=None):
         batch = self.get_object()
-        pending_records = batch.records.filter(status='PENDING')
-        count = 0
-        for record in pending_records:
-            record.status = 'APPROVED'
-            record.save()
-            ApprovalLog.objects.create(
-                record=record,
-                action='APPROVED',
-                performed_by=request.data.get('performed_by', 'analyst'),
-                note=request.data.get('note', '')
+        performed_by = request.data.get('performed_by', 'analyst')
+        note = request.data.get('note', '')
+        try:
+            with transaction.atomic():
+                pending_ids = list(
+                    batch.records.select_for_update()
+                    .filter(status='PENDING')
+                    .values_list('id', flat=True)
+                )
+                if not pending_ids:
+                    return Response({'status': 'approved', 'count': 0, 'message': 'No pending records'})
+
+                updated_count = EmissionRecord.objects.filter(
+                    id__in=pending_ids,
+                    status='PENDING',
+                ).update(status='APPROVED')
+
+                ApprovalLog.objects.bulk_create([
+                    ApprovalLog(
+                        record_id=record_id,
+                        action='APPROVED',
+                        performed_by=performed_by,
+                        note=note,
+                    )
+                    for record_id in pending_ids
+                ])
+
+                if updated_count:
+                    batch.status = 'REVIEW_IN_PROGRESS'
+                    batch.save(update_fields=['status'])
+                    self._update_batch_aggregates(batch)
+        except OperationalError:
+            return Response(
+                {
+                    'error': 'Database is busy processing another approval request. Please retry.',
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
-            count += 1
-        
-        if pending_records.exists():
-            batch.status = 'REVIEW_IN_PROGRESS'
-            batch.save()
-            self._update_batch_aggregates(batch)
-        
-        return Response({'status': 'approved', 'count': count})
+
+        return Response({'status': 'approved', 'count': updated_count})
     
-    @action(detail=False, methods=['post'], url_path=r'upload-(?P<source_type>\w+)')
+    @action(detail=False, methods=['post'], url_path=r'upload-(?P<source_type>[-\w]+)')
     def upload_csv(self, request, source_type=None):
         source_type_map = {
             'sap-fuel': 'SAP_FUEL',
+            'sap_fuel': 'SAP_FUEL',
             'sap-procurement': 'SAP_PROCUREMENT',
+            'sap_procurement': 'SAP_PROCUREMENT',
             'utility-electricity': 'UTILITY_ELECTRICITY',
+            'utility_electricity': 'UTILITY_ELECTRICITY',
             'corporate-travel': 'CORPORATE_TRAVEL',
+            'corporate_travel': 'CORPORATE_TRAVEL',
         }
-        model_source_type = source_type_map.get(source_type, source_type.upper())
+        source_key = (source_type or '').strip().lower()
+        model_source_type = source_type_map.get(source_key)
+        if not model_source_type:
+            return Response(
+                {
+                    'error': 'Unsupported source type',
+                    'supported': sorted(source_type_map.keys()),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         
         file_obj = request.FILES.get('file')
         if not file_obj:
             return Response({'error': 'No file provided'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        decoded_file = file_obj.read().decode('utf-8')
+
+        try:
+            decoded_file = file_obj.read().decode('utf-8-sig')
+        except UnicodeDecodeError:
+            return Response(
+                {'error': 'File must be a UTF-8 encoded CSV'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         reader = csv.DictReader(io.StringIO(decoded_file))
+        if not reader.fieldnames:
+            return Response({'error': 'CSV header row is missing'}, status=status.HTTP_400_BAD_REQUEST)
+
+        required_headers = REQUIRED_COLUMNS.get(model_source_type, [])
+        missing_headers = [header for header in required_headers if header not in reader.fieldnames]
+        if missing_headers:
+            return Response(
+                {
+                    'error': 'CSV is missing required headers',
+                    'missing_headers': missing_headers,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         
         batch = ImportBatch.objects.create(
             source_type=model_source_type,
@@ -245,6 +327,7 @@ class ImportBatchViewSet(viewsets.ModelViewSet):
         
         succeeded = 0
         failed = 0
+        row_errors = []
         
         for row in reader:
             try:
@@ -283,7 +366,13 @@ class ImportBatchViewSet(viewsets.ModelViewSet):
                 elif model_source_type == 'UTILITY_ELECTRICITY':
                     raw_unit = 'kWh'
                 elif model_source_type == 'CORPORATE_TRAVEL':
-                    raw_unit = row.get('currency', 'USD')
+                    travel_category = str(row.get('category', '')).upper()
+                    if travel_category in ('FLIGHT', 'GROUND'):
+                        raw_unit = 'km'
+                    elif travel_category == 'HOTEL':
+                        raw_unit = 'night'
+                    else:
+                        raw_unit = row.get('currency', 'USD')
                 
                 EmissionRecord.objects.create(
                     batch=batch,
@@ -309,6 +398,8 @@ class ImportBatchViewSet(viewsets.ModelViewSet):
                 succeeded += 1
             except Exception as e:
                 failed += 1
+                if len(row_errors) < 20:
+                    row_errors.append(str(e))
         
         batch.rows_total = succeeded + failed
         batch.rows_succeeded = succeeded
@@ -321,6 +412,7 @@ class ImportBatchViewSet(viewsets.ModelViewSet):
             'total': batch.rows_total,
             'succeeded': batch.rows_succeeded,
             'failed': batch.rows_failed,
+            'row_errors': row_errors,
         })
     
     def _update_batch_aggregates(self, batch):
@@ -342,14 +434,27 @@ class EmissionRecordViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
         record = self.get_object()
-        record.status = 'APPROVED'
-        record.save()
-        ApprovalLog.objects.create(
-            record=record,
-            action='APPROVED',
-            performed_by=request.data.get('performed_by', 'analyst'),
-            note=request.data.get('note', '')
-        )
+        performed_by = request.data.get('performed_by', 'analyst')
+        note = request.data.get('note', '')
+        try:
+            with transaction.atomic():
+                updated_count = EmissionRecord.objects.select_for_update().filter(
+                    id=record.id,
+                    status__in=['PENDING', 'FLAGGED'],
+                ).update(status='APPROVED')
+                if not updated_count:
+                    return Response({'status': 'already_approved'})
+                ApprovalLog.objects.create(
+                    record=record,
+                    action='APPROVED',
+                    performed_by=performed_by,
+                    note=note,
+                )
+        except OperationalError:
+            return Response(
+                {'error': 'Database is busy processing another approval request. Please retry.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         # Update batch aggregates
         batch = record.batch
         view = ImportBatchViewSet()

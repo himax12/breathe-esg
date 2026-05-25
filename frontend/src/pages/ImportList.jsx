@@ -21,35 +21,52 @@ export default function ImportList() {
   const [batches, setBatches] = useState([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState('')
   const [uploadSource, setUploadSource] = useState('sap-fuel')
   const [file, setFile] = useState(null)
+  const [page, setPage] = useState(1)
+  const [totalCount, setTotalCount] = useState(0)
+  const [hasNext, setHasNext] = useState(false)
+  const [hasPrev, setHasPrev] = useState(false)
   const navigate = useNavigate()
 
-  const fetchBatches = async () => {
+  const fetchBatches = async (targetPage = page) => {
+    setLoading(true)
+    setError('')
     try {
-      const data = await getBatches()
+      const data = await getBatches(targetPage)
       setBatches(data.results || [])
+      setTotalCount(data.count ?? (data.results || []).length)
+      setHasNext(Boolean(data.next))
+      setHasPrev(Boolean(data.previous))
     } catch (err) {
       console.error('Failed to fetch batches:', err)
+      setError(err.message || 'Failed to fetch batches')
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    fetchBatches()
-  }, [])
+    fetchBatches(page)
+  }, [page])
 
   const handleUpload = async (e) => {
     e.preventDefault()
     if (!file) return
     setUploading(true)
+    setError('')
     try {
       await uploadCSV(uploadSource, file)
       setFile(null)
-      fetchBatches()
+      if (page === 1) {
+        fetchBatches(1)
+      } else {
+        setPage(1)
+      }
     } catch (err) {
       console.error('Upload failed:', err)
+      setError(err.message || 'Upload failed')
     } finally {
       setUploading(false)
     }
@@ -99,6 +116,11 @@ export default function ImportList() {
           </form>
         </div>
       </header>
+      {error && (
+        <div style={{ marginBottom: '16px', background: '#fee2e2', color: '#b91c1c', padding: '10px 12px', borderRadius: '8px', fontSize: '0.875rem' }}>
+          {error}
+        </div>
+      )}
 
       <div style={{ background: 'white', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -167,6 +189,41 @@ export default function ImportList() {
             ))}
           </tbody>
         </table>
+      </div>
+      <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ color: '#64748b', fontSize: '0.875rem' }}>
+          Showing {batches.length} of {totalCount} imports
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={!hasPrev || loading}
+            style={{
+              padding: '6px 12px',
+              border: '1px solid #e2e8f0',
+              borderRadius: '6px',
+              background: hasPrev ? 'white' : '#f1f5f9',
+              color: '#334155',
+              cursor: hasPrev ? 'pointer' : 'not-allowed'
+            }}
+          >
+            Previous
+          </button>
+          <button
+            onClick={() => setPage(p => p + 1)}
+            disabled={!hasNext || loading}
+            style={{
+              padding: '6px 12px',
+              border: '1px solid #e2e8f0',
+              borderRadius: '6px',
+              background: hasNext ? 'white' : '#f1f5f9',
+              color: '#334155',
+              cursor: hasNext ? 'pointer' : 'not-allowed'
+            }}
+          >
+            Next
+          </button>
+        </div>
       </div>
     </div>
   )
